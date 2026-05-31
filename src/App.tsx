@@ -13,7 +13,7 @@ import { PromotionDialog } from './components/PromotionDialog'
 import { lessons, pieceTips } from './data/lessons'
 import { puzzles } from './data/puzzles'
 import { chooseBotMove, hintMoves } from './utils/bot'
-import { explainMove, isPromotionMove, makeGame, type PromotionChoice } from './utils/chessHelpers'
+import { explainMove, isPromotionMove, legalMovesFor, makeGame, type PromotionChoice } from './utils/chessHelpers'
 
 export type Mode = 'learn' | 'practice' | 'bot' | 'two'
 
@@ -23,6 +23,8 @@ type PendingPromotion = {
   from: Square
   to: Square
 }
+
+type MoveResult = 'moved' | 'blocked' | 'illegal'
 
 function App() {
   const [mode, setMode] = useState<Mode>('learn')
@@ -41,8 +43,10 @@ function App() {
   const [blackName, setBlackName] = useState('Friend')
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null)
   const [activePuzzle, setActivePuzzle] = useState(0)
-  const [hintVisible, setHintVisible] = useState(false)
+  const [hintLevel, setHintLevel] = useState(0)
+  const [hintMessage, setHintMessage] = useState('')
   const [puzzleSolved, setPuzzleSolved] = useState(false)
+  const [passPromptPlayer, setPassPromptPlayer] = useState('')
 
   const game = useMemo(() => makeGame(fen), [fen])
   const lastMove = moves.at(-1) ?? null
@@ -57,7 +61,9 @@ function App() {
     setSelectedSquare(null)
     setPendingPromotion(null)
     setPuzzleSolved(false)
-    setHintVisible(false)
+    setHintLevel(0)
+    setHintMessage('')
+    setPassPromptPlayer('')
     setCoachMessage('Fresh board, fresh ideas. Have fun!')
   }
 
@@ -77,25 +83,42 @@ function App() {
     setPastFens((old) => [...old, fenBefore])
     setMoves((old) => [...old, move])
     setSelectedSquare(null)
+    setHintLevel(0)
+    setHintMessage('')
     setCoachMessage(explainMove(move, fenAfter))
-    if (mode === 'two' && autoFlip) setOrientation((old) => (old === 'white' ? 'black' : 'white'))
-  }, [autoFlip, mode])
+    if (mode === 'two' && autoFlip) {
+      setOrientation((old) => (old === 'white' ? 'black' : 'white'))
+      setPassPromptPlayer(move.color === 'w' ? blackName : whiteName)
+    }
+  }, [autoFlip, blackName, mode, whiteName])
 
-  const applyMove = (from: Square, to: Square, promotion?: PromotionChoice) => {
+  const applyMove = (from: Square, to: Square, promotion?: PromotionChoice): MoveResult => {
     const copy = makeGame(fen)
     const move = copy.move({ from, to, promotion })
-    if (!move) return false
-    recordMove(move, fen, copy.fen())
+    if (!move) return 'illegal'
     if (mode === 'practice') {
       const attempt = `${move.from}${move.to}${move.promotion ?? ''}`
       const solved = puzzles[activePuzzle].solutions.includes(attempt)
-      setPuzzleSolved(solved)
-      setCoachMessage(solved ? 'Beautiful work! You solved the puzzle.' : 'Great try! This puzzle has a special target, so try again or ask for a hint.')
+      if (!solved) {
+        setPuzzleSolved(false)
+        setSelectedSquare(null)
+        setCoachMessage('Good try! This puzzle has a special goal. Try another move or ask for a hint.')
+        return 'blocked'
+      }
     }
-    return true
+    recordMove(move, fen, copy.fen())
+    if (mode === 'practice') {
+      setPuzzleSolved(true)
+      setCoachMessage('Beautiful work! You solved the puzzle.')
+    }
+    return 'moved'
   }
 
   const tryMove = (from: Square, to: Square) => {
+    if (passPromptPlayer) {
+      setCoachMessage(`Pass the board to ${passPromptPlayer} first.`)
+      return false
+    }
     if (isBotTurn) {
       setCoachMessage('Coach Owl is thinking for a moment.')
       return false
@@ -104,15 +127,19 @@ function App() {
       setPendingPromotion({ from, to })
       return false
     }
-    const ok = applyMove(from, to, isPromotionMove(fen, from, to) ? 'q' : undefined)
-    if (!ok) setCoachMessage('That piece moves a different way.')
-    return ok
+    const result = applyMove(from, to, isPromotionMove(fen, from, to) ? 'q' : undefined)
+    if (result === 'illegal') setCoachMessage('That piece moves a different way.')
+    return result === 'moved'
   }
 
   const onSquareClick = (square: Square) => {
     const piece = game.get(square)
     if (!selectedSquare) {
       if (!piece) return
+      if (passPromptPlayer) {
+        setCoachMessage(`Pass the board to ${passPromptPlayer} first.`)
+        return
+      }
       if (piece.color !== game.turn()) {
         setCoachMessage('It is not that side’s turn.')
         return
@@ -140,21 +167,49 @@ function App() {
     setFen(pastFens[pastFens.length - steps])
     setPastFens(nextPast)
     setMoves((old) => old.slice(0, -steps))
+    setHintLevel(0)
+    setHintMessage('')
+    setPassPromptPlayer('')
     setCoachMessage('No worries. Let’s try that moment again.')
   }
 
+  const practiceHint = (nextLevel: number) => {
+    const puzzle = puzzles[activePuzzle]
+    const solutionMoves = puzzle.solutions
+      .map((solution) => {
+        const from = solution.slice(0, 2) as Square
+        return legalMovesFor(puzzle.fen, from).find((move) => `${move.from}${move.to}${move.promotion ?? ''}` === solution)
+      })
+      .filter((move): move is Move => Boolean(move))
+
+    if (nextLevel === 1) return puzzle.hint
+    if (nextLevel === 2) {
+      const candidates = solutionMoves.slice(0, 3).map((move) => move.san).join(', ')
+      return candidates ? `Try one of these candidate moves: ${candidates}.` : 'Look for a legal move that matches the puzzle goal.'
+    }
+    return `The puzzle move is ${solutionMoves[0]?.san ?? puzzle.solutions[0]}.`
+  }
+
   const showHint = () => {
+    const nextLevel = Math.min(hintLevel + 1, 3)
+    setHintLevel(nextLevel)
     if (mode === 'practice') {
-      setHintVisible(true)
-      setCoachMessage(puzzles[activePuzzle].hint)
+      const message = practiceHint(nextLevel)
+      setHintMessage(message)
+      setCoachMessage(message)
       return
     }
     const hints = hintMoves(fen)
-    setCoachMessage(
-      hints.length
-        ? `Try ${hints.map(({ move, reason }) => `${move.san} because it ${reason}`).join(', ')}.`
-        : 'There are no legal moves right now.',
-    )
+    let message = 'There are no legal moves right now.'
+    if (hints.length && nextLevel === 1) {
+      message = game.isCheck() ? 'Start by helping the king get safe.' : 'Look for a piece that can safely capture or move toward the center.'
+    } else if (hints.length && nextLevel === 2) {
+      message = `Good candidates: ${hints.map(({ move }) => move.san).join(', ')}.`
+    } else if (hints.length) {
+      message = `Try ${hints[0].move.san} because it ${hints[0].reason}.`
+    }
+    setHintMessage(message)
+    setCoachMessage(message)
   }
 
   const choosePuzzle = (index: number) => {
@@ -169,7 +224,11 @@ function App() {
       const move = chooseBotMove(fen)
       if (!move) return
       const copy = makeGame(fen)
-      const made = copy.move(move)
+      const made = copy.move({
+        from: move.from,
+        to: move.to,
+        promotion: move.promotion ?? (isPromotionMove(fen, move.from, move.to) ? 'q' : undefined),
+      })
       if (made) {
         recordMove(made, fen, copy.fen())
         setCoachMessage(`I moved ${made.san}. ${explainMove(made, copy.fen())}`)
@@ -221,6 +280,7 @@ function App() {
               orientation={orientation}
               showCoordinates={showCoordinates}
               beginnerHelp={beginnerHelp}
+              locked={Boolean(passPromptPlayer)}
             />
             <div className="controls-row">
               <button className="action-button" onClick={undo}>
@@ -248,7 +308,7 @@ function App() {
               <PracticePuzzle
                 puzzle={puzzles[activePuzzle]}
                 solved={puzzleSolved}
-                hintVisible={hintVisible}
+                hintMessage={hintMessage}
                 onHint={showHint}
                 onReset={() => resetGame(puzzles[activePuzzle].fen)}
               />
@@ -305,6 +365,18 @@ function App() {
             <MoveHistory moves={moves} />
           </aside>
         </section>
+      )}
+
+      {passPromptPlayer && (
+        <div className="pass-backdrop" role="dialog" aria-modal="true" aria-label="Pass to friend">
+          <div className="pass-card">
+            <h2>Pass the board to {passPromptPlayer}.</h2>
+            <p>Take a little handoff pause so each player gets their own turn.</p>
+            <button className="action-button primary" onClick={() => setPassPromptPlayer('')}>
+              I’m ready
+            </button>
+          </div>
+        </div>
       )}
 
       {pendingPromotion && (

@@ -4,13 +4,13 @@ import type { Puzzle } from '../data/puzzles'
 export function PracticePuzzle({
   puzzle,
   solved,
-  hintVisible,
+  hintMessage,
   onHint,
   onReset,
 }: {
   puzzle: Puzzle
   solved: boolean
-  hintVisible: boolean
+  hintMessage: string
   onHint: () => void
   onReset: () => void
 }) {
@@ -20,7 +20,7 @@ export function PracticePuzzle({
       <h2>{puzzle.title}</h2>
       <p>{puzzle.goal}</p>
       {solved && <div className="success-banner">Beautiful work! Puzzle solved.</div>}
-      {hintVisible && <p className="hint-text">{puzzle.hint}</p>}
+      {hintMessage && <p className="hint-text">{hintMessage}</p>}
       <div className="button-row">
         <button className="soft-button" onClick={onHint}>
           <Lightbulb size={16} />

@@ -10,6 +10,7 @@ type Props = {
   orientation: 'white' | 'black'
   showCoordinates: boolean
   beginnerHelp: boolean
+  locked?: boolean
 }
 
 export function ChessBoard({
@@ -20,6 +21,7 @@ export function ChessBoard({
   orientation,
   showCoordinates,
   beginnerHelp,
+  locked = false,
 }: Props) {
   const game = makeGame(fen)
   const legalMoves = selectedSquare && beginnerHelp ? legalMovesFor(fen, selectedSquare) : []
@@ -47,9 +49,12 @@ export function ChessBoard({
           boardOrientation: orientation,
           showNotation: showCoordinates,
           squareStyles: customSquareStyles,
-          onSquareClick: ({ square }) => onSquareClick(square as Square),
+          allowDragging: !locked,
+          onSquareClick: ({ square }) => {
+            if (!locked) onSquareClick(square as Square)
+          },
           onPieceDrop: ({ sourceSquare, targetSquare }) =>
-            Boolean(targetSquare && onPieceDrop(sourceSquare as Square, targetSquare as Square)),
+            Boolean(!locked && targetSquare && onPieceDrop(sourceSquare as Square, targetSquare as Square)),
           darkSquareStyle: { backgroundColor: '#75a8c7' },
           lightSquareStyle: { backgroundColor: '#f8efd2' },
           animationDurationInMs: 180,

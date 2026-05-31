@@ -450,6 +450,36 @@ input[type="text"],
   z-index: 20;
 }
 
+.pass-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(36, 49, 79, 0.28);
+  backdrop-filter: blur(5px);
+  z-index: 18;
+}
+
+.pass-card {
+  width: min(430px, 100%);
+  padding: 22px;
+  border-radius: 22px;
+  background: #ffffff;
+  border: 1px solid #cbe6f1;
+  box-shadow: 0 30px 80px rgba(22, 35, 55, 0.24);
+  text-align: center;
+}
+
+.pass-card p {
+  margin: 8px 0 16px;
+  color: #65708b;
+}
+
+.pass-card .action-button {
+  width: 100%;
+}
+
 .promotion-dialog {
   width: min(460px, 100%);
   padding: 22px;
@@ -510,11 +540,11 @@ input[type="text"],
 
 @media (max-width: 680px) {
   .app-shell {
-    padding: 14px;
+    padding: 10px;
   }
 
   h1 {
-    font-size: 32px;
+    font-size: 28px;
   }
 
   .mode-selector {
@@ -531,6 +561,7 @@ input[type="text"],
   .play-layout {
     display: flex;
     flex-direction: column;
+    gap: 10px;
   }
 
   .left-column,
@@ -539,13 +570,22 @@ input[type="text"],
   }
 
   .board-frame {
-    padding: 9px;
-    border-radius: 18px;
+    padding: 7px;
+    border-radius: 16px;
+    box-shadow: 0 16px 32px rgba(38, 85, 118, 0.16);
   }
 
   .controls-row {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .action-button,
+  .soft-button {
+    min-height: 50px;
+    padding: 12px 10px;
   }
 
   .lesson-grid {
@@ -554,10 +594,35 @@ input[type="text"],
 
   .coach-card {
     grid-template-columns: 58px 1fr;
+    padding: 10px;
+  }
+
+  .coach-card p {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .owl-avatar {
     width: 56px;
     height: 56px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .move-list,
+  .history-rows {
+    max-height: 58px;
+  }
+
+  .captured {
+    grid-template-columns: 1fr;
+  }
+
+  .status-grid {
+    grid-template-columns: 82px 1fr;
   }
 }
